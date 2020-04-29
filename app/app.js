@@ -9,7 +9,7 @@ const app = express();
 const sql = require('mssql')
 
 var config = {
-    server: 'DESKTOP-J6DUC0L\\MSSQLSERVER19',
+    server: 'DESKTOP-J6DUC0L\\MSSQLSERVER19', //update this with the server on your computer
     database: 'master',
     user: 'adminLogin',
     password: 'admin'
