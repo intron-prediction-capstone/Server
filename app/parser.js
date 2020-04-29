@@ -28,7 +28,7 @@ const LineByLineReader = require('line-by-line'),
 
 //number of lines to read in
 //if set to -1 will run entire file
-var lines = -1;
+var lines = 5;
 var counter0 = 0;
 
 //reads in gtf files
@@ -44,11 +44,15 @@ lr0.on('line', (line) => {
 
     console.log('gtf: start ' + counter0);
     //synchronous line processing
+    //the timeout is so that no two insertData can get called on top of each other
+    //without it two introns can be inserted at the same time since the parser will start the next insert before the previous is complete
+    //this will lead to multiple primary key insertations which will cause it to produce errors
     setTimeout(function () {
+        //console.log(res);
         insertData(res, lastIntronStartCoord, lastIntronEndCoord, counter0);
         //continue emitting lines.
         lr0.resume();
-    }, 1000)
+    }, 800)
 
     //ends after x lines
     counter0++;
@@ -83,6 +87,10 @@ lr1.on('line', (line) => {
         //console.log('String: ' + str);
 
         //handles inserts for the fasta file
+        //this timeout is so the gtf lines can be insertted first
+        //insert gene seq is an update that checks the gene id, transcript id and the intron start and end coords
+        //since it is update the gtf needs to be inserted first the update only will update data and not create new entries which is done by the gtf insertations
+        //the entire gtf file does not need to be inserted only the corresponding lines they both can run at the same time but the fasta is on a larger delay
         setTimeout(function () {
             linecount++;
             insertGeneSeq(header, str, linecount);
@@ -92,7 +100,7 @@ lr1.on('line', (line) => {
             counter1++
             lr1.resume();
         }, 1000)
-       
+
     } else {
         str = str + line;
     }
@@ -150,7 +158,7 @@ function insertData(res, lastIntronStartCoord, lastIntronEndCoord, counter) {
     var speciesName = 'Homo sapien';
     var commonName = 'Human';
 
-    //GTF file format is seqname, source, feature, start, end, score, strand, frame, geneid, transcriptid,
+    //GTF file format is seqname, source, feature, start, end, score, strand, frame, then attributes
     //takes the input and splits it by tabs
     //inserts the data into the database
     var chromosome = res[0];
@@ -171,8 +179,12 @@ function insertData(res, lastIntronStartCoord, lastIntronEndCoord, counter) {
         frame = 0;
     //the 8th item in the array ocntain the gene id and the transcript id
     //splits the 8th item of the array at the comma then makes two substrings of each
-    var ensemblGeneId = res[9].split(';')[0].substring(9, res[9].split(';')[0].length - 1);
-    var transcriptId = res[9].split(';')[1].substring(16, res[9].split(';')[1].length - 1);
+    var branchPoint = res[9].split(';')[0].substring(4, res[9].split(';')[0].length - 1);
+    var breakPointScore = res[9].split(';')[1].substring(11, res[9].split(';')[1].length - 1);
+    var fiveScore = res[9].split(';')[2].substring(13, res[9].split(';')[2].length - 1);
+    var ensemblGeneId = res[9].split(';')[3].substring(10, res[9].split(';')[3].length - 1);
+    var threeScore = res[9].split(';')[4].substring(14, res[9].split(';')[4].length - 1);
+    var transcriptId = res[9].split(';')[5].substring(16, res[9].split(';')[5].length - 1);
 
     var ensemblGeneLink = "https://useast.ensembl.org/Homo_sapiens/Gene/Summary?g=" + ensemblGeneId;
     var intronLength = intronEndCoord - intronStartCoord;
@@ -227,7 +239,7 @@ function insertData(res, lastIntronStartCoord, lastIntronEndCoord, counter) {
             //.input('intronSequence', sql.VarChar(), intronSequence)
             //.input('rank', sql.Int(), rank)
             .input('intronLength', sql.Int(), intronLength)
-            //.input('branchPoint', sql.VarChar(), branchPoint)
+            .input('branchPoint', sql.VarChar(), branchPoint)
             //.input('acceptorSpliceSite', sql.VarChar(), acceptorSpliceSite)
             .input('strand', sql.Bit(), strand)
             //.input('cluster', sql.Int(), cluster)
@@ -237,9 +249,9 @@ function insertData(res, lastIntronStartCoord, lastIntronEndCoord, counter) {
             //.input('donorSpliceSite', sql.VarChar(), donorSpliceSite)
 
             .input('overallScore', sql.Float(), overallScore)
-            //.input('fiveScore', sql.Float(), fiveScore)
-            //.input('threeScore', sql.Float(), threeScore)
-            //.input('breakPointScore', sql.Float(), breakPointScore)
+            .input('fiveScore', sql.Float(), fiveScore)
+            .input('threeScore', sql.Float(), threeScore)
+            .input('breakPointScore', sql.Float(), breakPointScore)
             .input('scoreType', sql.VarChar(255), scoreType)
 
             .input('exonStartCoordUp', sql.BigInt(), exonStartCoordUp)
